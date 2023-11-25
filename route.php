@@ -1,6 +1,44 @@
-<!-- Show these admin pages only when the admin is logged in -->
-<?php  require '../assets/partials/_admin-check.php';   ?>
-<?php error_reporting(0);?>
+<?php
+    require 'assets/partials/_functions.php';
+    $conn = db_connect();    
+
+    if(!$conn) 
+        die("Connection Failed");
+
+    if(!$_SERVER["REQUEST_METHOD"] == "POST" || !isset($_POST["search"]))
+    {
+        header("location: index.php");
+        exit;
+    }
+
+    $source = strtoupper($_POST["source"]);
+    $destination = strtoupper($_POST["destination"]);
+    $dep_date = $_POST["departure"];
+    $destination_state = strtoupper($_POST["destination_state"]);
+
+    
+    $sql = "SELECT * FROM routes WHERE route_dep_date='$dep_date'";
+    $result = mysqli_query($conn, $sql);
+    $no_results = mysqli_num_rows($result);
+    $count = 0;
+
+    while($row = mysqli_fetch_assoc($result))
+    {
+        $citiesArr = explode(",",$row["route_cities"]);
+        
+        // Search the tables if we have any routes thats matches the form details
+        if(!in_array($source, $citiesArr) || !in_array($destination, $citiesArr) || !(array_search($source, $citiesArr) < array_search($destination, $citiesArr)))
+            continue;
+        $count++;
+    }
+
+    $sql = "SELECT * FROM routes WHERE route_dep_date='$dep_date'";
+    $result = mysqli_query($conn, $sql);
+    $no_results = mysqli_num_rows($result);
+
+
+?>
+
 
 <!DOCTYPE html>
 <html lang="en">
@@ -8,8 +46,8 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Routes</title>
-        <!-- google fonts -->
+    <title>Routes Search Page</title>
+    <!-- google fonts -->
     <link rel="preconnect" href="https://fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@100;200;300;400;500&display=swap" rel="stylesheet">
     <!-- Font Awesome -->
@@ -17,560 +55,168 @@
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
     <!-- CSS -->
-	 <link rel="stylesheet" href="../assets/styles/custom.php">
-    <?php 
-       require '../assets/styles/admin.php';
-        require '../assets/styles/admin-options.php';
-        $page="route";
-    ?>
-	<style>   
-	
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th, td {
-  padding: 10px;
-  text-align: center;
-}
-
-th {
-  background-color: #f2f2f2;
-}
-
-tr:nth-child(even) {
-  background-color: #f9f9f9;
-}
-
-/* Styling for the buttons */
-.button {
-  display: inline-block;
-  padding: 8px 16px;
-  margin-right: 5px;
-  border: none;
-  background-color: #4CAF50;
-  color: white;
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.button.edit-button {
-  background-color: #007bff;
-}
-
-.button.delete-button {
-  background-color: #dc3545;
-}
-
-/* Styling for the modals */
-.modal-dialog {
-  max-width: 500px;
-}
-
-.modal-content {
-  padding: 20px;
-}
-
-.modal-title {
-  margin-bottom: 20px;
-}
-
-/* Styling for the alerts */
-.alert {
-  margin-bottom: 10px;
-}
-
-.alert-heading {
-  margin-bottom: 5px;
-}
-
-.alert-info {
-  margin-top: 20px;
-}
-
-.alert-success {
-  background-color: #28a745;
-  color: white;
-}
-
-.alert-danger {
-  background-color: #dc3545;
-  color: white;
-}
-	.button {
-            padding: 5px 10px;
-            border-radius: 4px;
-            color: #fff;
-            font-size: 14px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-        }
-
-        .button.edit-button {
-            background-color: #17a2b8;
-            border: none;
-            margin-right: 5px;
-			width:70%
-        }
-
-        .button.delete-button {
-            background-color: #dc3545;
-            border: none;
-			width:70%
-        }
-
-        .button.edit-button:hover,
-        .button.delete-button:hover {
-            background-color: #0d6efd;
-        }</style>
+    <?php require 'assets/styles/search_routes.php'?>
 </head>
 <body>
-    <!-- Requiring the admin header files -->
-    <?php require '../assets/partials/_admin-header.php';?>
+    <div id="covidInfo">
 
-    <!-- Add, Edit and Delete Routes -->
-    <?php
-        /*
-            1. Check if an admin is logged in
-            2. Check if the request method is POST
-        */
-        if($loggedIn && $_SERVER["REQUEST_METHOD"] == "POST")
-        {
-            if(isset($_POST["submit"]))
-            {
-                /*
-                    ADDING ROUTES
-                 Check if the $_POST key 'submit' exists
-                */
-                // Should be validated client-side
-                $viaCities = strtoupper($_POST["viaCities"]);
-                $cost = $_POST["stepCost"];
-                $deptime = $_POST["dep_time"];
-                $depdate = $_POST["dep_date"];
-                $busno = $_POST["busno"];
-				$bus_type = $_POST["bus_type"];
-				$From = $_POST["From"];
-				$To = $_POST["To"];
-                $route_exists = exist_routes($conn,$viaCities,$depdate, $deptime,$bus_type,$From,$To);
-                $route_added = false;
-        
-                if(!$route_exists)
-                {
-                    // Route is unique, proceed
-                    $sql = "INSERT INTO `routes` (`route_cities`,
-                     `bus_no`, 
-                     `route_dep_date`,
-                     `route_dep_time`, `route_step_cost`,`bus_type`,`From`,`To`,`route_created`) VALUES ('$viaCities','$busno', '$depdate','$deptime', '$cost', '$bus_type','$From','$To',  current_timestamp());";
-                    $result = mysqli_query($conn, $sql);
+    </div>
+    <header>
+        <nav id="navbar">
+            <div>
+                <a href="#" class="nav-item nav-logo">GOBUS</a>
+                <a href="#" class="nav-item">Gallery</a>
+            </div>
+            <ul>
+                <li><a href="index.php" class="nav-item">Home</a></li>
+                <li><a href="#about" class="nav-item">About</a></li>
+                <li><a href="#contact" class="nav-item">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="container">
+        <section id="searched-route">
+            <ul>
+                <li class="searched-route-item" id="">Total Results : <span id="result-num">
+                    <?php 
+                        echo $count;
+                    ?>
+                </span></li>
+                <li class="searched-route-item"><?php echo $source; ?> <span class="arrow">&rarr;</span> <?php echo $destination; ?>
+                <li class="searched-route-item" id="date">
+                <?php 
+                    // Changing format from yyyy-mm-dd to dd-mm-yyyy
+                    $dep_date = implode("-",(array_reverse(explode("-", $dep_date))));
                     
-                    // Gives back the Auto Increment id
-                    $autoInc_id = mysqli_insert_id($conn);
-                    // If the id exists then, 
-                    if($autoInc_id)
-                    {
-                        $code = rand(1,99999);
-                        // Generates the unique userid
-                        $route_id = "RT-".$code.$autoInc_id;
-                        
-                        $query = "UPDATE `routes` SET `route_id` = '$route_id' WHERE `routes`.`id` = $autoInc_id;";
-                        $queryResult = mysqli_query($conn, $query);
-                        if(!$queryResult)
-                            echo "Not Working";
-                    }
-                    
-                    if($result)
-                    {
-                        $route_added = true;
-                        // The bus is now assigned, updating uses table
-                        bus_assign($conn, $busno);
-                    }
-                }
-    
-                if($route_added)
-                {
-                    // Show success alert
-                    echo '<div class="my-0 alert alert-success alert-dismissible fade show" role="alert">
-                    <strong>Successful!</strong> Route Added
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>';
-                }
-                else{
-                    
-                    // Show error alert
-                    echo '<div class="my-0 alert alert-danger alert-dismissible fade show" role="alert">
-                    <strong>Error!</strong> Route already exists
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>';
-                }
-            }
-            if(isset($_POST["edit"]))
-            {
-                // EDIT ROUTES
-                $viaCities = strtoupper($_POST["viaCities"]);
-                $cost = $_POST["stepCost"];
-                $id = $_POST["id"];
-                $deptime = $_POST["dep_time"];
-                $depdate = $_POST["dep_date"];
-                $busno = $_POST["busno"];
-                $oldBusNo = $_POST["old-busno"];
-				$bus_type = $_POST["bus_type"];
-				$From = $_POST["From"];
-				$To = $_POST["To"];
+                    echo $dep_date;
 
-                $id_if_route_exists = exist_routes($conn,$viaCities,$depdate,$deptime,$bus_type,$From,$To);
-           
-                if(!$id_if_route_exists || $id == $id_if_route_exists)
-                {
-                    $updateSql = "UPDATE `routes` SET
-                    `route_cities` = '$viaCities',
-                    `bus_no`='$busno',
-                    `route_dep_date` = '$depdate',
-                    `route_dep_time` = '$deptime',
-                    `route_step_cost` = '$cost',
-					`bus_type`='$bus_type',
-					`From`='$From',
-					`To`='$To' WHERE `routes`.`id` = '$id';";
-            
-                    $updateResult = mysqli_query($conn, $updateSql);
-                    $rowsAffected = mysqli_affected_rows($conn);
-                    
-                    $messageStatus = "danger";
-                    $messageInfo = "";
-                    $messageHeading = "Error!";
-    
-                    if(!$rowsAffected)
-                    {
-                        $messageInfo = "No Edits Administered!";
-                    }
-    
-                    elseif($updateResult)
-                    {
-                        // To assign the new bus, and free the old one - this should only reun when the bus no is edited.
-                        if($oldBusNo != $busno)
-                        {
-                            bus_assign($conn,$busno);
-                            bus_free($conn, $oldBusNo);
-                        }
-                        // Show success alert
-                        $messageStatus = "success";
-                        $messageHeading = "Successfull!";
-                        $messageInfo = "Route details Edited";
-                    }
-                    else{
-                        // Show error alert
-                        $messageInfo = "Your request could not be processed due to technical Issues from our part. We regret the inconvenience caused";
-                    }
-                    
-                    // MESSAGE
-                    echo '<div class="my-0 alert alert-'.$messageStatus.' alert-dismissible fade show" role="alert">
-                    <strong>'.$messageHeading.'</strong> '.$messageInfo.'
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>';
-                }
-                else 
-                {
-                    // If route details already exists
-                    echo '<div class="my-0 alert alert-danger alert-dismissible fade show" role="alert">
-                    <strong>Error!</strong> Route details already exists
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>';
-                }
-
-            }
-            if(isset($_POST["delete"]))
-            {
-                // DELETE ROUTES
-                $id = $_POST["id"];
-                // Get the bus_no from route_id
-                $busno_toFree = busno_from_routeid($conn, $id);
-                // Delete the route with id => id
-                $deleteSql = "DELETE FROM `routes` WHERE `routes`.`id` = $id";
-                $deleteResult = mysqli_query($conn, $deleteSql);
-                $rowsAffected = mysqli_affected_rows($conn);
-                $messageStatus = "danger";
-                $messageInfo = "";
-                $messageHeading = "Error!";
-
-                if(!$rowsAffected)
-                {
-                    $messageInfo = "Record Doesnt Exist";
-                }
-
-                elseif($deleteResult)
-                {   
-                    // echo $num;
-                    // Show success alert
-                    $messageStatus = "success";
-                    $messageInfo = "Route Details deleted";
-                    $messageHeading = "Successfull!";
-                    // Free the bus assigned
-                    bus_free($conn, $busno_toFree);
-                }
-                else{
-                    // Show error alert
-                    $messageInfo = "Your request could not be processed due to technical Issues from our part. We regret the inconvenience caused";
-                }
-                // Message
-                echo '<div class="my-0 alert alert-'.$messageStatus.' alert-dismissible fade show" role="alert">
-                <strong>'.$messageHeading.'</strong> '.$messageInfo.'
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>';
-            }
-        }
-        ?>    
-        <?php
-            $resultSql = "SELECT * FROM `routes` ORDER BY route_created DESC";
-                            
-            $resultSqlResult = mysqli_query($conn, $resultSql);
-            if(!mysqli_num_rows($resultSqlResult)){ ?>
-                <!-- Routes are not present -->
+                ?></li>
+            </ul>
+        </section>
+        <section id="searched-results">
+        <?php 
+            if(!$count)
+            {?>
                 <div class="container mt-4">
                     <div id="noRoutes" class="alert alert-dark " role="alert">
                         <h1 class="alert-heading">No Routes Found!!</h1>
-                        <p class="fw-light">Be the first person to add one!</p>
+                        <p class="fw-light">
+                            Currently there are no services for the specified route
+                        </p>
                         <hr>
-                        <div id="addRouteAlert" class="alert alert-success" role="alert">
-                                Click on <button id="add-button" class="button btn-sm"type="button"data-bs-toggle="modal" data-bs-target="#addModal">ADD <i class="fas fa-plus"></i></button> to add a route!
+                        <div id="addCustomerAlert" class="alert alert-success" role="alert">
+                                We will soon make this route available for service
                         </div>
                     </div>
                 </div>
             <?php }
-            else { ?>
-                <!-- Routes Are present -->
-                <section id="route">
-                    <div id="head">
-                        <h4>Route Status</h4>
-                    </div>
-                    <div id="route-results">
-                        <div>
-                            <button id="add-button" class="button btn-sm"type="button"data-bs-toggle="modal" data-bs-target="#addModal">Add Route Details <i class="fas fa-plus"></i></button>
-                        </div>
-                        <table class="table table-hover table-bordered">
-                            <thead>
-                                <th>ID</th>
-                                <th>Via Cities</th>
-                                <th>Bus</th>
-                                <th>Departure Date</th>
-                                <th>Departure Time</th>
-                                <th>Cost</th>
-								<th>Bus Type </th>
-								<th>From</th>
-								<th>To</th>
-								<th>Actions</th>
-                            </thead>
-                            <?php
-                                while($row = mysqli_fetch_assoc($resultSqlResult))
-                                {
-                                        // echo "<pre>";
-                                        // var_export($row);
-                                        // echo "</pre>";
-                                    $id = $row["id"];
-                                    $route_id = $row["route_id"];
-                                    $route_cities = $row["route_cities"];
-                                    $route_dep_time = $row["route_dep_time"];
-                                    $route_dep_date = $row["route_dep_date"];
-                                    $route_step_cost = $row["route_step_cost"];
-                                    $bus_no = $row["bus_no"];
-									$bus_type = $row["bus_type"];
-									$From = $row["From"];
-									$To = $row["To"];
-                                        ?>
-                                    <tr>
-                                        <td>
-                                            <?php 
-                                                echo $route_id;
-                                            ?>
-                                        </td>
-                                        <td>
-                                            <?php 
-                                                echo $route_cities;
-                                            ?>
-                                        </td>
-                                        <td>
-                                            <?php 
-                                                echo $bus_no;
-                                            ?>
-                                        </td>
-                                        <td>
-                                            <?php 
-                                                echo $route_dep_date;
-                                            ?>
-                                        </td>
-                                        <td>
-                                            <?php 
-                                                echo $route_dep_time;
-                                            ?>
-                                        </td>
-                                        <td>
-                                            <?php 
-                                                echo '$'.$route_step_cost;?>
-                                        </td>
-										<td>
-										<?php
-										    echo $bus_type;?>
-										</td>
-										<td>
-										<?php
-										    echo $From;?>
-										</td>
-										<td>
-										<?php
-										    echo $To;?>
-										</td>
-										
-                                        <td>
-                                            <button class="button edit-button " data-link="<?php echo $_SERVER['REQUEST_URI']; ?>" data-id="<?php 
-                                                echo $id;?>" data-cities="<?php 
-                                                echo $route_cities;?>" data-cost="<?php 
-                                                echo $route_step_cost;?>" data-date="<?php 
-                                                echo $route_dep_date;
-                                            ?>" data-time="<?php 
-                                            echo $route_dep_time;
-                                            ?>" data-busno="<?php 
-                                            echo $bus_no;
-                                            ?>" data-Bus_Type="<?php 
-                                                echo $bus_type;?>" data-From="<?php 
-				echo $From;?>" data-To="<?php echo $To;?>"
-                                               >Edit</button>
-                                            <button class="button delete-button" data-bs-toggle="modal" data-bs-target="#deleteModal" data-id="<?php 
-                                                echo $id;?>">Delete</button>
-                                        </td>
-										
-                                    </tr>
-                                <?php 
-                                }
-                            ?>
-                        </table>
-                    </div>
-                    </section>
-                <?php  }
-            ?>
-            </div>
-    </main>
-            <?php
-                $busSql = "Select * from buses where bus_assigned=0";
-                $resultBusSql = mysqli_query($conn, $busSql);
-                $arr = array();
-                while($row = mysqli_fetch_assoc($resultBusSql))
-                    $arr[] = $row;
-                $busJson = json_encode($arr);
-            ?>
-            <!-- Add Route Modal -->
-            <div class="modal fade" id="addModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="exampleModalLabel">Add A Route</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <form id="addRouteForm" action="<?php echo $_SERVER['REQUEST_URI']; ?>" method="POST">
-							
-                            <input type="hidden" id="busJson" name="busJson" value='<?php echo $busJson; ?>'>
-							<div class="mb-3">
-                                <label for="text" class="form-label">Bus Type</label>
-                                <input type="text" name="bus_type" id="bus_type" min="
-                                <?php
-                                    echo date("H:i");
-                                ?>
-                                " required>
-                            </div>
-							<div class="mb-3">
-                                <label for="text" class="form-label">From</label>
-                                <input type="text" name="From" id="From" min="
-                                <?php
-                                    echo date("H:i");
-                                ?>
-                                " required>
-                            </div>
-							<div class="mb-3">
-                                <label for="text" class="form-label">To</label>
-                                <input type="text" name="To" id="To" min="
-                                <?php
-                                    echo date("H:i");
-                                ?>
-                                " required>
-                            </div>
-                            <div class="mb-3">
-                                    <label for="viaCities" class="form-label">Via Cities</label>
-                                <input type="text" class="form-control" id="viaCities" name="viaCities" placeholder="Comma Separated List" required>
-                                <span id="error">
+            while($row = mysqli_fetch_assoc($result))
+            {
+                $citiesArr = explode(",",$row["route_cities"]);
+                
+                // Search the tables if we have any routes that matches the form details
+                if(!in_array($source, $citiesArr) || !in_array($destination, $citiesArr) || !(array_search($source, $citiesArr) < array_search($destination, $citiesArr)))
+                    continue;
 
-                                </span>
-                            </div>
-                            <div class="mb-3">
-                                <label for="busno" class="form-label">Bus Number</label>
-                                <!-- Search Functionality -->
-                                <div class="searchBus">
-                                    <input type="text" class="form-control  busnoInput" id="busno" name="busno" required>
-                                    <div class="sugg">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="stepCost" class="form-label">Cost</label>
-                                <input type="number" class="form-control" id="stepCost" name="stepCost" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="date" class="form-label">Departure Date</label>
-                                <input type="date" name="dep_date" id="date" min="<?php 
-                                date_default_timezone_set("Asia/Kolkata");
-                                echo date("Y-m-d");?>" value="
+                
+                
+                $route_id = $row["route_id"];
+                $route_dep_time = $row["route_dep_time"];
+                $route_stepCost = $row["route_step_cost"];
+                $bus_no = $row["bus_no"];
+
+                $source_idx = array_search($source, $citiesArr);
+                $dest_idx = array_search($destination, $citiesArr);
+
+                $viaCities = false;
+                if($source_idx + 1 != $dest_idx)
+                {
+                    $viaCities = implode(",", array_slice($citiesArr, $source_idx + 1, $dest_idx - $source_idx));
+                }
+
+                $booking_amount = ($dest_idx - $source_idx) * $route_stepCost;
+                
+                $booked_seats = get_from_table($conn,"seats", "bus_no", $bus_no, "seat_booked");
+                    
+                $booked_seatsArr = [];
+
+                if($booked_seats)
+                $booked_seatsArr = explode(",", $booked_seats);
+
+                $no_available_seats = 38 - count($booked_seatsArr);
+                ?>
+                <div class="searched-container">
+                    <div class="searched-result-item">
+                        <div class="route-id">
+                            <p>
+                                <?php echo $route_id; ?>
+                            </p>
+                        </div>
+                        <div class="timing">
+                            <p>
                                 <?php 
-                                echo date("Y-m-d");
+                                    echo $route_dep_time;
                                 ?>
-                                " required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="time" class="form-label">Departure Time</label>
-                                <input type="time" name="dep_time" id="time" min="
-                                <?php
-                                    echo date("H:i");
+                            </p>
+                        </div>
+                        <div class="route-desc" data-dest="<?php echo $destination_state; ?>">
+                            <p class="main-route">
+                                <span class="source-route">
+                                    <?php 
+                                        echo $source;
+                                    ?>
+                                </span> 
+                                <span class="arrow">&rarr;</span> 
+                                <span class="dest-route">
+                                    <?php 
+                                        echo $destination;
+                                    ?>
+                                </span>
+                            </p>
+                            <p class="cities">
+                                <?php if($viaCities){ ?>
+                                    <span class="via">Via</span> 
+                                    <?php 
+                                        echo $viaCities;
+                                }
+                                else{ ?>
+                                    <span class="via">Direct</span>
+                                <?php }
                                 ?>
-                                " required>
+                            </p>
+                        </div>
+                        <div class="seats-desc">
+                            <div>
+                                <span class="num-seats">
+                                <!-- Total or taken?? -->
+                                <?php 
+                                    echo $no_available_seats;
+                                ?>
+                            </span> seats
                             </div>
-						
-                            <button type="submit" class="btn btn-success" name="submit">Submit</button>
-                        </form>
+                        </div>
+                        <div class="booking-desc">
+                            <p class="price"><i class="fas fa-rupee-sign"></i> 
+                                <?php 
+                                    echo $booking_amount;
+                                ?></p>
+                            <button class="book-seat-btn" data-busno="<?php 
+                            echo $bus_no;?>" data-seats="<?php echo $booked_seats; ?>" data-routeid="<?php echo $route_id; ?>" data-amount="<?php echo $booking_amount; ?>" data-source="<?php echo $source; ?>" data-destination="<?php echo $destination; ?>">
+                                Select Seats
+                            </button>
+                        </div>
                     </div>
-                    <div class="modal-footer">
-                        <!-- Add Anything -->
-                    </div>
-                    </div>
+                <!-- Book Row -->
+                <div class="bookContainer">
+                
                 </div>
-        </div>
-        <!-- Delete Modal -->
-        <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="exampleModalLabel"><i class="fas fa-exclamation-circle"></i></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <h2 class="text-center pb-4">
-                    Are you sure?
-                </h2>
-                <p>
-                    Do you really want to delete this route? <strong>This process cannot be undone.</strong>
-                </p>
-                <!-- Needed to pass id -->
-                <form action="<?php echo $_SERVER['REQUEST_URI']; ?>" id="delete-form"  method="POST">
-                    <input id="delete-id" type="hidden" name="id">
-                </form>
-            </div>
-            <div class="modal-footer d-flex justify-content-center">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" form="delete-form" name="delete" class="btn btn-danger">Delete</button>
-            </div>
-            </div>
-        </div>
-        </div>
-    <!-- External JS -->
-    <script src="../assets/scripts/admin_routes.js"></script>
-    <!-- Option 1: Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4" crossorigin="anonymous"></script>
+        <?php  }?>
+        </section>
+    </main>
+    
+    <script src="assets/scripts/booking.js"></script>
+     <!-- Option 1: Bootstrap Bundle with Popper -->
+     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4" crossorigin="anonymous"></script>
 </body>
 </html>
